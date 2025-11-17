@@ -91,7 +91,7 @@ jobs:
             # --- DM: DOWNLOAD STARTED ---
             curl -s -X POST "https://api.telegram.org/bot$TG_TOKEN/sendMessage" \
               -d chat_id="$TG_DM" \
-              -d text="⬇️ *Downloading Started* ($count/$total)%0AVersion: \`$VERSION\`" \
+              -d text="⬇️ *Downloading Started GLO * ($count/$total)%0AVersion: \`$VERSION\`" \
               -d parse_mode="Markdown" > /dev/null
 
             # 2. Download
@@ -113,7 +113,7 @@ jobs:
             echo "📦 Creating GitHub Release..."
             
             # --- NEW RELEASE NOTES FORMAT ---
-            NOTES="**Region:** GLOBAL ( CPH2663GLO ) 🇮🇳"$'\n'"**Version:** ${VERSION} 📱"$'\n'"**Type:** Official OTA 📦"$'\n\n'"**BOOT & INIT_BOOT of this ${VERSION} can be found here :** https://t.me/boot_imgs_nord4/2"
+            NOTES="**Region:** GLOBAL ( CPH2663GLO ) "$'\n'"**Version:** ${VERSION} 📱"$'\n'"**Type:** Official OTA 📦"$'\n\n'"**BOOT & INIT_BOOT of this ${VERSION} can be found here :** https://t.me/boot_imgs_nord4/2"
             
             gh release create "$TAG" -t "OnePlus OTA - ${VERSION}" -n "$NOTES"
 
