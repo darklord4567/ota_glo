@@ -1,0 +1,169 @@
+name: OnePlus Bulk OTA Archiver
+
+on:
+  workflow_dispatch:
+
+jobs:
+  process_otas:
+    runs-on: ubuntu-latest
+    steps:
+      # -------------------------------------------------
+      # 1. CHECKOUT
+      # -------------------------------------------------
+      - name: 📥 Checkout Repo
+        uses: actions/checkout@v3
+
+      # -------------------------------------------------
+      # 2. FREE DISK SPACE
+      # -------------------------------------------------
+      - name: 🧹 Free Disk Space
+        run: |
+          sudo rm -rf /usr/share/dotnet || true
+          sudo rm -rf /usr/local/lib/android || true
+          sudo rm -rf /opt/ghc || true
+          sudo docker system prune -af || true
+          sudo apt-get autoremove -y
+          sudo apt-get clean
+          df -h
+
+      # -------------------------------------------------
+      # 3. INSTALL TOOLS
+      # -------------------------------------------------
+      - name: 📦 Install Tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y aria2 p7zip-full
+
+      # -------------------------------------------------
+      # 4. PROCESS OTAS (THE LOOP)
+      # -------------------------------------------------
+      - name: 🔄 Process OTAs Loop
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TG_TOKEN: ${{ secrets.TG_TOKEN }}
+          TG_DM: ${{ secrets.TG_DM }}
+        run: |
+          # -------------------------------------------------------
+          # CONFIGURATION: LIST YOUR OTAS HERE
+          # Format: "VERSION|URL"
+          # -------------------------------------------------------
+          declare -a OTAS=(
+            "14.1.0.320|https://gauss-opexcostmanual-in.allawnofs.com/remove-2e90cd6819bd40d91d81ce48962c5e47/component-ota/24/07/19/7488951e750b43f8b1dbee4cbb550af7.zip"
+            "14.1.0.330|https://gauss-opexcostmanual-in.allawnofs.com/remove-ab7c907cfcdd7fcd078a6933ef2c1b40/component-ota/24/07/29/b972f88cdd714b069dfa5285e04647ad.zip"
+            "14.1.0.401|https://gauss-opexcostmanual-in.allawnofs.com/remove-67972eeb11159169456eb5b9ed478538/component-ota/24/08/20/652ae361560a48d5be24b554509cf274.zip"
+            "14.1.0.603|https://gauss-opexcostmanual-in.allawnofs.com/remove-3f924c857bfee7fb8925d32730757d10/component-ota/24/10/11/0ce353d810fe4e369b1e77afedbf6fe5.zip"
+            "15.0.0.300|https://gauss-opexcostmanual-in.allawnofs.com/remove-223d11510b04fc52b4c79017a89d6d8a/component-ota/24/11/18/bad3c20461fd4ccf83dba59422060984.zip"
+            "15.0.0.401|https://gauss-opexcostmanual-in.allawnofs.com/remove-7217edec683b4ac3b3d0962ef7367b1e/component-ota/24/12/26/4eb9804f701c48b1a05149587be45f25.zip"
+            "15.0.0.500|https://gauss-opexcostmanual-sg.allawnofs.com/remove-0c0ccfec7a13c6bc2d1df919aabc5205/component-ota/25/01/21/5165855be586441bbba74f7809afa582.zip"
+            "15.0.0.601|https://gauss-opexcostmanual-sg.allawnofs.com/remove-e0902eb95e47becaaeecc9a904d02414/component-ota/25/02/26/6c257cbc1e1f48f2ac1e1769f135d86a.zip"
+            "15.0.0.701|https://gauss-opexcostmanual-sg.allawnofs.com/remove-0171d8a45c7de834982ecc7fa7997d48/component-ota/25/03/19/8cd7298053e4409c91709a915237306a.zip"
+            "15.0.0.702|https://gauss-opexcostmanual-in.allawnofs.com/remove-459f080b011d3f7d18d516112314f62a/component-ota/25/04/07/69fa4e0f8bda42a49c205eedec679eee.zip"
+            "15.0.0.1201|https://gauss-opexcostmanual-in.allawnofs.com/remove-0dc7f132fce20f4add8a08a31ea923b3/component-ota/25/08/11/c624de49bb154f6f872fea8432975fe5.zip"
+            "15.0.0.1204|https://gauss-opexcostmanual-in.allawnofs.com/remove-13b29d8c384102e41b70ddccab49e8d1/component-ota/25/09/02/fa356c1b20994acfb3e9d76360aa8d97.zip"
+            "15.0.0.1301|https://gauss-opexcostmanual-in.allawnofs.com/remove-a033210237d666164b6cab188c83b83b/component-ota/25/10/14/8a1ff2df86fa4279bb422f8cabf4debe.zip"
+          )
+
+          # -------------------------------------------------------
+          # START LOOP
+          # -------------------------------------------------------
+          count=0
+          total=${#OTAS[@]}
+          
+          for item in "${OTAS[@]}"; do
+            count=$((count+1))
+            
+            # Split string
+            VERSION="${item%%|*}"
+            URL="${item##*|}"
+            
+            TAG="CPH2661IN-${VERSION}"
+            BASE_NAME="CPH2661IN-${VERSION}"
+            
+            echo "---------------------------------------------------"
+            echo "🚀 Processing [$count/$total]: $TAG"
+            echo "---------------------------------------------------"
+
+            # Check if Release exists
+            if gh release view "$TAG" >/dev/null 2>&1; then
+              echo "⚠️ Release $TAG already exists. Skipping..."
+              continue
+            fi
+
+            # --- DM: DOWNLOAD STARTED ---
+            curl -s -X POST "https://api.telegram.org/bot$TG_TOKEN/sendMessage" \
+              -d chat_id="$TG_DM" \
+              -d text="⬇️ *Downloading Started* ($count/$total)%0AVersion: \`$VERSION\`" \
+              -d parse_mode="Markdown" > /dev/null
+
+            # 2. Download
+            echo "⬇️ Downloading..."
+            aria2c "$URL" -x16 -s16 -k1M -o ota.zip -q
+
+            # --- DM: ZIPPING ---
+            curl -s -X POST "https://api.telegram.org/bot$TG_TOKEN/sendMessage" \
+              -d chat_id="$TG_DM" \
+              -d text="✂️ *Zipping/Splitting...*" \
+              -d parse_mode="Markdown" > /dev/null
+
+            # 3. Split
+            echo "✂️ Splitting..."
+            mkdir -p split_output
+            7z a -t7z -mx=0 -v1900m "split_output/${BASE_NAME}.7z" "ota.zip"
+
+            # 4. Create Release
+            echo "📦 Creating GitHub Release..."
+            
+            # --- NEW RELEASE NOTES FORMAT ---
+            NOTES="**Region:** INDIA ( CPH 2661IN ) 🇮🇳"$'\n'"**Version:** ${VERSION} 📱"$'\n'"**Type:** Official OTA 📦"$'\n\n'"**BOOT & INIT_BOOT of this ${VERSION} can be found here :** https://t.me/boot_imgs_nord4/2"
+            
+            gh release create "$TAG" -t "OnePlus OTA - ${VERSION}" -n "$NOTES"
+
+            # 5. Upload Loop (With Start/Done DMs)
+            echo "📤 Uploading assets..."
+            part_num=0
+            
+            # Enable nullglob in case of weird file matches
+            shopt -s nullglob
+            
+            for f in split_output/*; do
+               part_num=$((part_num+1))
+               fname=$(basename "$f")
+               
+               # --- DM: UPLOAD START ---
+               curl -s -X POST "https://api.telegram.org/bot$TG_TOKEN/sendMessage" \
+                -d chat_id="$TG_DM" \
+                -d text="🚀 *Upload Started*: $fname" \
+                -d parse_mode="Markdown" > /dev/null
+
+               # Upload (Force overwrite)
+               gh release upload "$TAG" "$f" --clobber
+               
+               # --- DM: UPLOAD DONE ---
+               curl -s -X POST "https://api.telegram.org/bot$TG_TOKEN/sendMessage" \
+                -d chat_id="$TG_DM" \
+                -d text="✅ *Upload Done*: $fname" \
+                -d parse_mode="Markdown" > /dev/null
+            done
+
+            # 6. Cleanup
+            echo "🧹 Cleaning up..."
+            rm -rf ota.zip split_output
+            
+            echo "✅ Done with $TAG"
+          done
+          
+          echo "🎉 All tasks finished!"
+
+      # -------------------------------------------------
+      # 5. FAILURE NOTIFICATION
+      # -------------------------------------------------
+      - name: ❌ DM — Pipeline Failed
+        if: ${{ failure() }}
+        env:
+          TG_TOKEN: ${{ secrets.TG_TOKEN }}
+          TG_DM: ${{ secrets.TG_DM }}
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot$TG_TOKEN/sendMessage" \
+          -d chat_id="$TG_DM" \
+          -d text="❌ *Pipeline FAILED!* Check GitHub Actions logs for details." \
+          -d parse_mode="Markdown"
