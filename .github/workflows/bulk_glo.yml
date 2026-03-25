@@ -48,7 +48,7 @@ jobs:
           # Format: "VERSION|URL"
           # -------------------------------------------------------
           declare -a OTAS=(
-            "16.0.2.401|https://gauss-compota-c-sg.allawnofs.com/remove-7e7abb34d5537a3b5cba33a74f455253/g-fa1269ea0d8c8723b5734305e48f7d46/component-ota/26/01/06/7948b3637e5e43e88a189e7e436e943a.zip?sign=6f74162361110167be4a7e9a7baf4224&t=697198c2&x-oss-signature=bUIUe%2FHxFTMyHdpZrCI1pwq9KkEkUVjqNj%2B5pZdbuaA%3D&x-oss-signature-version=OSS2&x-oss-expires=1769054154&x-oss-access-key-id=LTAI5t7LQqPWs3796pRv6Avx"
+            "16.0.5.701|https://gauss-compota-c-sg.allawnofs.com/remove-27ad75dfac663d66ed2a525c5a73cf49/g-10eab6008d5642cf42abd2aa41f847cb/component-ota/26/03/20/9efa01ec20bb4bfb85cdd24cf69e7c24.zip?sign=2a1e37325ae217c65bfedd5a9c6297f0&t=69c3e7e2&x-oss-signature=JDNQiGFeXew9ZwigxTKFcRpqf5tyeGPvNn%2FqitMSX58%3D&x-oss-signature-version=OSS2&x-oss-expires=1774448362&x-oss-access-key-id=LTAI5t7LQqPWs3796pRv6Avx"
           )
 
           # -------------------------------------------------------
