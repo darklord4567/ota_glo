@@ -1,0 +1,167 @@
+name: GLO Full OTA Download
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'OTA Version (e.g., 16.0.5.1001)'
+        required: true
+        type: string
+      url:
+        description: 'OTA Download URL'
+        required: true
+        type: string
+
+jobs:
+  process_otas:
+    runs-on: ubuntu-latest
+    steps:
+      # -------------------------------------------------
+      # 1. CHECKOUT
+      # -------------------------------------------------
+      - name: 📥 Checkout Repo
+        uses: actions/checkout@v4
+
+      # -------------------------------------------------  
+      # 2. FREE DISK SPACE  
+      # -------------------------------------------------  
+      - name: 🧹 Free Disk Space  
+        run: |  
+          sudo rm -rf /usr/share/dotnet || true  
+          sudo rm -rf /usr/local/lib/android || true  
+          sudo rm -rf /opt/ghc || true  
+          sudo docker system prune -af || true  
+          sudo apt-get autoremove -y  
+          sudo apt-get clean  
+          df -h  
+
+      # -------------------------------------------------  
+      # 3. INSTALL TOOLS  
+      # -------------------------------------------------  
+      - name: 📦 Install Tools  
+        run: |  
+          sudo apt-get update  
+          sudo apt-get install -y aria2 p7zip-full jq
+
+      # -------------------------------------------------  
+      # 4. PROCESS OTAS (THE LOOP)  
+      # -------------------------------------------------  
+      - name: 🔄 Process OTAs Loop  
+        env:  
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}  
+          TG_TOKEN: ${{ secrets.TG_TOKEN }}  
+          TG_DM: ${{ secrets.TG_DM }}  
+        run: |  
+          # Helper function to safely URL-encode text for Telegram API
+          tg_send() {
+            local text="$1"
+            local encoded_text
+            encoded_text=$(jq -rn --arg str "$text" '$str | @uri')
+            curl -s -X POST "https://api.telegram.org/bot$TG_TOKEN/sendMessage" \
+              -d "chat_id=$TG_DM" \
+              -d "text=$encoded_text" \
+              -d "parse_mode=Markdown" > /dev/null
+          }
+
+          # -------------------------------------------------------  
+          # CONFIGURATION: GENERATED FROM MANUAL INPUTS  
+          # -------------------------------------------------------  
+          declare -a OTAS=(  
+            "${{ inputs.version }}|${{ inputs.url }}"  
+          )  
+
+          # -------------------------------------------------------  
+          # START LOOP  
+          # -------------------------------------------------------  
+          count=0  
+          total=${#OTAS[@]}  
+            
+          for item in "${OTAS[@]}"; do  
+            count=$((count+1))  
+              
+            # Split string  
+            VERSION="${item%%|*}"  
+            URL="${item##*|}"  
+              
+            TAG="CPH2663GLO-${VERSION}"  
+            BASE_NAME="CPH2663GLO-${VERSION}"  
+              
+            echo "---------------------------------------------------"  
+            echo "🚀 Processing [$count/$total]: $TAG"  
+            echo "---------------------------------------------------"  
+
+            # Check if Release exists  
+            if gh release view "$TAG" >/dev/null 2>&1; then  
+              echo "⚠️ Release $TAG already exists. Skipping..."  
+              continue  
+            fi  
+
+            # --- DM: DOWNLOAD STARTED ---  
+            tg_send "⬇️ *Downloading Started GLO * ($count/$total)
+            Version: \`$VERSION\`"
+
+            # 2. Download  
+            echo "⬇️ Downloading..."  
+            aria2c "$URL" -x16 -s16 -k1M -o ota.zip -q  
+
+            # --- DM: ZIPPING ---  
+            tg_send "✂️ *Zipping/Splitting...*"
+
+            # 3. Split  
+            echo "✂️ Splitting..."  
+            mkdir -p split_output  
+            7z a -t7z -mx=0 -v1900m "split_output/${BASE_NAME}.7z" "ota.zip"  
+
+            # 4. Create Release  
+            echo "📦 Creating GitHub Release..."  
+              
+            # --- NEW RELEASE NOTES FORMAT ---  
+            NOTES="**Region:** GLOBAL ( CPH2663GLO ) "$'\n'"**Version:** ${VERSION} 📱"$'\n'"**Type:** Official OTA 📦"$'\n\n'"**BOOT & INIT_BOOT of this ${VERSION} can be found here :** https://t.me/boot_imgs_nord4/2"  
+              
+            gh release create "$TAG" -t "OnePlus OTA - ${VERSION}" -n "$NOTES"  
+
+            # 5. Upload Loop (With Start/Done DMs)  
+            echo "📤 Uploading assets..."  
+            part_num=0  
+              
+            # Enable nullglob in case of weird file matches  
+            shopt -s nullglob  
+              
+            for f in split_output/*; do  
+               part_num=$((part_num+1))  
+               fname=$(basename "$f")  
+                 
+               # --- DM: UPLOAD START ---  
+               tg_send "🚀 *Upload Started*: $fname"
+
+               # Upload (Force overwrite)  
+               gh release upload "$TAG" "$f" --clobber  
+                 
+               # --- DM: UPLOAD DONE ---  
+               tg_send "✅ *Upload Done*: $fname"
+            done  
+
+            # 6. Cleanup  
+            echo "🧹 Cleaning up..."  
+            rm -rf ota.zip split_output  
+              
+            echo "✅ Done with $TAG"  
+          done  
+            
+          echo "🎉 All tasks finished!"  
+
+      # -------------------------------------------------  
+      # 5. FAILURE NOTIFICATION  
+      # -------------------------------------------------  
+      - name: ❌ DM — Pipeline Failed  
+        if: ${{ failure() }}  
+        env:  
+          TG_TOKEN: ${{ secrets.TG_TOKEN }}  
+          TG_DM: ${{ secrets.TG_DM }}  
+        run: |  
+          # Inline safe URL encoding for failure fallback
+          encoded_fail=$(jq -rn --arg str "❌ *Pipeline FAILED!* Check GitHub Actions logs for details." '$str | @uri')
+          curl -s -X POST "https://api.telegram.org/bot$TG_TOKEN/sendMessage" \
+            -d "chat_id=$TG_DM" \
+            -d "text=$encoded_fail" \
+            -d "parse_mode=Markdown" > /dev/null
